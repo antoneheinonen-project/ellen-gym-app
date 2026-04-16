@@ -2,6 +2,21 @@ import { useState, useEffect } from 'react'
 
 const XP_PER_LEVEL = 500
 
+const PLAN = {
+  Monday: {
+    name: 'Glutes & hamstrings',
+    exercises: ['Hip thrust', 'Romanian deadlift', 'Cable kickback', 'Leg curl']
+  },
+  Wednesday: {
+    name: 'Glutes & quads',
+    exercises: ['Bulgarian split squat', 'Leg press (high foot)', 'Hip abduction machine', 'Frog pump']
+  },
+  Friday: {
+    name: 'Glutes focus',
+    exercises: ['Sumo deadlift', 'Single-leg hip thrust', 'Side-lying clam', 'Cable kickback']
+  },
+}
+
 export default function HomeScreen({ setScreen }) {
   const [checkIn, setCheckIn] = useState(null)
   const [streak, setStreak] = useState(0)
@@ -19,26 +34,15 @@ export default function HomeScreen({ setScreen }) {
     if (savedXp) setXp(parseInt(savedXp))
   }, [])
 
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long' })
+  const todaySession = PLAN[today] || null
+  const isRestDay = !todaySession
+
   const level = Math.floor(xp / XP_PER_LEVEL) + 1
   const xpIntoLevel = xp % XP_PER_LEVEL
   const xpPercent = Math.round((xpIntoLevel / XP_PER_LEVEL) * 100)
 
   const workoutLogs = JSON.parse(localStorage.getItem('workoutLogs') || '{}')
-
-  const todaysPlan = [
-    { name: 'Hip thrust', last: workoutLogs['Hip thrust'] ? `${workoutLogs['Hip thrust'].weight} kg · last session` : '80 kg · 4×10', target: '82.5 kg' },
-    { name: 'Romanian deadlift', last: workoutLogs['Romanian deadlift'] ? `${workoutLogs['Romanian deadlift'].weight} kg · last session` : '55 kg · 3×12', target: '57.5 kg' },
-    { name: 'Cable kickback', last: workoutLogs['Cable kickback'] ? `${workoutLogs['Cable kickback'].weight} kg · last session` : '20 kg · 3×15', target: '22 kg' },
-    { name: 'Leg curl', last: workoutLogs['Leg curl'] ? `${workoutLogs['Leg curl'].weight} kg · last session` : '40 kg · 3×12', target: '42.5 kg' },
-  ]
-
-  const totalPRs = Object.keys(workoutLogs).filter(k => !k.includes('_done')).length
-
-  const card = {
-    background: '#fff', borderRadius: '16px',
-    padding: '14px', marginBottom: '12px',
-    border: '0.5px solid #f0dde5',
-  }
 
   const getGreeting = () => {
     const h = new Date().getHours()
@@ -47,7 +51,23 @@ export default function HomeScreen({ setScreen }) {
     return 'Good evening'
   }
 
+  const getNextSession = () => {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const todayIndex = days.indexOf(today)
+    for (let i = 1; i <= 7; i++) {
+      const next = days[(todayIndex + i) % 7]
+      if (PLAN[next]) return { day: next, session: PLAN[next] }
+    }
+  }
+
+  const nextSession = getNextSession()
   const lastRating = localStorage.getItem('lastWorkoutRating')
+
+  const card = {
+    background: '#fff', borderRadius: '16px',
+    padding: '14px', marginBottom: '12px',
+    border: '0.5px solid #f0dde5',
+  }
 
   return (
     <div style={{ padding: '24px 16px 16px' }}>
@@ -57,11 +77,9 @@ export default function HomeScreen({ setScreen }) {
         <div>
           <div style={{ fontSize: '20px', fontWeight: '500', color: '#4a2030' }}>{getGreeting()}</div>
           <div style={{ fontSize: '12px', color: '#b07a8e', marginTop: '2px' }}>
-            {workouts.length === 0 ? 'Ready to start your journey?' : `${workouts.length} workouts logged`}
+            {isRestDay ? `${today} — rest day` : `${today} — ${todaySession.name}`}
           </div>
         </div>
-
-        {/* Streak ring */}
         <div style={{
           width: '64px', height: '64px', borderRadius: '50%',
           border: `3px solid ${streak > 0 ? '#d4537e' : '#f7d6e4'}`,
@@ -76,11 +94,9 @@ export default function HomeScreen({ setScreen }) {
       {/* Last workout rating banner */}
       {lastRating && lastRating !== 'Great' && (
         <div style={{
-          ...card,
-          background: '#faeeda',
+          ...card, background: '#faeeda',
           borderLeft: '3px solid #ef9f27',
-          borderRadius: '0 16px 16px 0',
-          marginBottom: '12px'
+          borderRadius: '0 16px 16px 0', marginBottom: '12px'
         }}>
           <div style={{ fontSize: '11px', fontWeight: '500', color: '#854f0b', marginBottom: '2px' }}>
             Last workout was {lastRating.toLowerCase()}
@@ -91,46 +107,89 @@ export default function HomeScreen({ setScreen }) {
         </div>
       )}
 
-      {/* Stats row */}
+      {/* Stats */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
         {[
           { num: workouts.length, label: 'Workouts' },
-          { num: totalPRs > 0 ? `${totalPRs}` : '0', label: 'Exercises logged' },
-          { num: streak > 0 ? `${streak}🔥` : '0', label: 'Day streak' },
+          { num: `Lvl ${level}`, label: 'Current level' },
+          { num: streak > 0 ? streak : '0', label: 'Day streak' },
         ].map((stat, i) => (
           <div key={i} style={{
             flex: 1, background: '#fff', border: '0.5px solid #f0dde5',
             borderRadius: '12px', padding: '10px', textAlign: 'center'
           }}>
-            <div style={{ fontSize: '18px', fontWeight: '500', color: '#993556' }}>{stat.num}</div>
+            <div style={{ fontSize: '16px', fontWeight: '500', color: '#993556' }}>{stat.num}</div>
             <div style={{ fontSize: '9px', color: '#b07a8e', marginTop: '2px' }}>{stat.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Today's plan */}
-      <div style={card}>
-        <div style={{ fontSize: '12px', fontWeight: '500', color: '#4a2030', marginBottom: '10px' }}>
-          Today's plan — Glutes & hamstrings
-        </div>
-        {todaysPlan.map((ex, i) => (
-          <div key={i} style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '8px 0',
-            borderBottom: i < todaysPlan.length - 1 ? '0.5px solid #fbe8f0' : 'none'
-          }}>
-            <div>
-              <div style={{ fontSize: '12px', fontWeight: '500', color: '#4a2030' }}>{ex.name}</div>
-              <div style={{ fontSize: '10px', color: '#b07a8e', marginTop: '2px' }}>Last: {ex.last}</div>
-            </div>
-            <button onClick={() => setScreen('plan')} style={{
-              background: '#f7d6e4', color: '#993556', border: 'none',
-              borderRadius: '99px', padding: '5px 12px',
-              fontSize: '10px', fontWeight: '500', cursor: 'pointer'
-            }}>Start</button>
+      {/* Today's session OR rest day */}
+      {isRestDay ? (
+        <div style={{ ...card, textAlign: 'center', padding: '24px 14px' }}>
+          <div style={{ fontSize: '28px', marginBottom: '8px' }}>🌸</div>
+          <div style={{ fontSize: '13px', fontWeight: '500', color: '#4a2030', marginBottom: '4px' }}>
+            Rest day
           </div>
-        ))}
-      </div>
+          <div style={{ fontSize: '11px', color: '#b07a8e', marginBottom: '12px', lineHeight: '1.5' }}>
+            Recovery is where the growth happens. Eat well, sleep well, hydrate.
+          </div>
+          {nextSession && (
+            <div style={{
+              background: '#fdf0f4', borderRadius: '10px', padding: '10px',
+              fontSize: '11px', color: '#4a2030'
+            }}>
+              Next session: <span style={{ fontWeight: '500', color: '#993556' }}>
+                {nextSession.day} — {nextSession.session.name}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={card}>
+          <div style={{ fontSize: '12px', fontWeight: '500', color: '#4a2030', marginBottom: '10px' }}>
+            Today — {todaySession.name}
+          </div>
+          {todaySession.exercises.map((exName, i) => {
+            const lastLog = workoutLogs[exName]
+            return (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 0',
+                borderBottom: i < todaySession.exercises.length - 1 ? '0.5px solid #fbe8f0' : 'none'
+              }}>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '500', color: '#4a2030' }}>{exName}</div>
+                  <div style={{ fontSize: '10px', color: '#b07a8e', marginTop: '2px' }}>
+                    {lastLog ? `Last: ${lastLog.weight} kg · ${lastLog.reps} reps` : 'No previous log'}
+                  </div>
+                </div>
+                <button onClick={() => setScreen('plan')} style={{
+                  background: '#f7d6e4', color: '#993556', border: 'none',
+                  borderRadius: '99px', padding: '5px 12px',
+                  fontSize: '10px', fontWeight: '500', cursor: 'pointer'
+                }}>Start</button>
+              </div>
+            )
+          })}
+          <button onClick={() => {
+            localStorage.setItem('activeSession', JSON.stringify({
+              name: todaySession.name,
+              exercises: todaySession.exercises.map(name => ({
+                name, sets: 3, reps: '10-12',
+                target: workoutLogs[name]?.weight || 20, tag: 'Glute-focused'
+              }))
+            }))
+            setScreen('workout')
+          }} style={{
+            width: '100%', background: '#993556', color: '#fff',
+            border: 'none', borderRadius: '99px', padding: '12px',
+            fontSize: '12px', fontWeight: '500', cursor: 'pointer', marginTop: '12px'
+          }}>
+            Start today's workout
+          </button>
+        </div>
+      )}
 
       {/* XP bar */}
       <div style={card}>
@@ -140,19 +199,13 @@ export default function HomeScreen({ setScreen }) {
         </div>
         <div style={{ background: '#fbe8f0', borderRadius: '99px', height: '8px' }}>
           <div style={{
-            background: 'linear-gradient(90deg, #d4537e, #993556)',
-            borderRadius: '99px', height: '8px',
-            width: `${xpPercent}%`,
-            transition: 'width 0.5s ease'
+            background: '#d4537e', borderRadius: '99px', height: '8px',
+            width: `${xpPercent}%`, transition: 'width 0.5s ease'
           }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-          <div style={{ fontSize: '9px', color: '#b07a8e' }}>
-            {xp} total XP
-          </div>
-          <div style={{ fontSize: '9px', color: '#b07a8e' }}>
-            {XP_PER_LEVEL - xpIntoLevel} XP to level {level + 1}
-          </div>
+          <div style={{ fontSize: '9px', color: '#b07a8e' }}>{xp} total XP</div>
+          <div style={{ fontSize: '9px', color: '#b07a8e' }}>{XP_PER_LEVEL - xpIntoLevel} XP to level {level + 1}</div>
         </div>
       </div>
 
@@ -170,16 +223,18 @@ export default function HomeScreen({ setScreen }) {
               flex: 1, background: badge.unlocked ? '#f7d6e4' : '#fdf0f4',
               borderRadius: '12px', padding: '8px 4px', textAlign: 'center',
               opacity: badge.unlocked ? 1 : 0.4,
-              border: badge.unlocked ? '0.5px solid #f0dde5' : '0.5px solid #f0dde5'
+              border: '0.5px solid #f0dde5'
             }}>
               <div style={{ fontSize: '20px', marginBottom: '4px' }}>{badge.icon}</div>
-              <div style={{ fontSize: '8px', color: '#993556', fontWeight: '500', lineHeight: '1.2' }}>{badge.label}</div>
+              <div style={{ fontSize: '8px', color: '#993556', fontWeight: '500', lineHeight: '1.2' }}>
+                {badge.label}
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Check in nudge */}
+      {/* Check in */}
       {!checkIn ? (
         <button onClick={() => setScreen('checkin')} style={{
           width: '100%', background: '#993556', color: '#fff',
