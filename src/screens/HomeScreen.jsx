@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const XP_PER_LEVEL = 500
 
@@ -22,6 +22,11 @@ export default function HomeScreen({ setScreen }) {
   const [streak, setStreak] = useState(0)
   const [workouts, setWorkouts] = useState([])
   const [xp, setXp] = useState(0)
+  const [timerSeconds, setTimerSeconds] = useState(0)
+  const [timerRunning, setTimerRunning] = useState(false)
+  const [timerMode, setTimerMode] = useState('stopwatch')
+  const [countdownFrom, setCountdownFrom] = useState(60)
+  const intervalRef = useRef(null)
 
   useEffect(() => {
     const savedCheckIn = localStorage.getItem('lastCheckIn')
@@ -33,6 +38,44 @@ export default function HomeScreen({ setScreen }) {
     if (savedWorkouts) setWorkouts(JSON.parse(savedWorkouts))
     if (savedXp) setXp(parseInt(savedXp))
   }, [])
+
+  useEffect(() => {
+    if (timerRunning) {
+      intervalRef.current = setInterval(() => {
+        setTimerSeconds(s => {
+          if (timerMode === 'countdown') {
+            if (s <= 1) {
+              setTimerRunning(false)
+              return 0
+            }
+            return s - 1
+          }
+          return s + 1
+        })
+      }, 1000)
+    } else {
+      clearInterval(intervalRef.current)
+    }
+    return () => clearInterval(intervalRef.current)
+  }, [timerRunning, timerMode])
+
+  const startTimer = () => {
+    if (timerMode === 'countdown' && timerSeconds === 0) {
+      setTimerSeconds(countdownFrom)
+    }
+    setTimerRunning(true)
+  }
+
+  const resetTimer = () => {
+    setTimerRunning(false)
+    setTimerSeconds(timerMode === 'countdown' ? countdownFrom : 0)
+  }
+
+  const formatTime = (s) => {
+    const mins = Math.floor(s / 60)
+    const secs = s % 60
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
 
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long' })
   const todaySession = PLAN[today] || null
@@ -63,11 +106,17 @@ export default function HomeScreen({ setScreen }) {
   const nextSession = getNextSession()
   const lastRating = localStorage.getItem('lastWorkoutRating')
 
+  const timerProgress = timerMode === 'countdown'
+    ? ((countdownFrom - timerSeconds) / countdownFrom) * 100
+    : Math.min((timerSeconds / 300) * 100, 100)
+
   const card = {
     background: '#fff', borderRadius: '16px',
     padding: '14px', marginBottom: '12px',
     border: '0.5px solid #f0dde5',
   }
+
+  const COUNTDOWN_PRESETS = [30, 60, 90, 120, 180, 300]
 
   return (
     <div style={{ padding: '24px 16px 16px' }}>
@@ -190,6 +239,90 @@ export default function HomeScreen({ setScreen }) {
           </button>
         </div>
       )}
+
+      {/* Timer */}
+      <div style={card}>
+        <div style={{ fontSize: '11px', fontWeight: '500', color: '#4a2030', marginBottom: '10px' }}>Timer</div>
+
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
+          {['stopwatch', 'countdown'].map(mode => (
+            <button key={mode} onClick={() => {
+              setTimerMode(mode)
+              setTimerRunning(false)
+              setTimerSeconds(mode === 'countdown' ? countdownFrom : 0)
+            }} style={{
+              flex: 1, padding: '6px', borderRadius: '99px', border: 'none',
+              background: timerMode === mode ? '#993556' : '#f7d6e4',
+              color: timerMode === mode ? '#fff' : '#993556',
+              fontSize: '10px', fontWeight: '500', cursor: 'pointer',
+              textTransform: 'capitalize'
+            }}>{mode}</button>
+          ))}
+        </div>
+
+        {/* Countdown presets */}
+        {timerMode === 'countdown' && !timerRunning && timerSeconds === 0 && (
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '12px', flexWrap: 'wrap' }}>
+            {COUNTDOWN_PRESETS.map(sec => (
+              <button key={sec} onClick={() => {
+                setCountdownFrom(sec)
+                setTimerSeconds(sec)
+              }} style={{
+                padding: '4px 10px', borderRadius: '99px', border: 'none',
+                background: countdownFrom === sec ? '#993556' : '#fdf0f4',
+                color: countdownFrom === sec ? '#fff' : '#b07a8e',
+                fontSize: '10px', fontWeight: '500', cursor: 'pointer',
+                border: `0.5px solid ${countdownFrom === sec ? '#993556' : '#f0dde5'}`
+              }}>
+                {sec < 60 ? `${sec}s` : `${sec / 60}m`}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Timer display */}
+        <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+          {/* Progress ring */}
+          <div style={{ position: 'relative', display: 'inline-block', marginBottom: '8px' }}>
+            <svg width="120" height="120" style={{ transform: 'rotate(-90deg)' }}>
+              <circle cx="60" cy="60" r="54" fill="none" stroke="#fbe8f0" strokeWidth="6" />
+              <circle
+                cx="60" cy="60" r="54" fill="none"
+                stroke="#d4537e" strokeWidth="6"
+                strokeDasharray={`${2 * Math.PI * 54}`}
+                strokeDashoffset={`${2 * Math.PI * 54 * (1 - timerProgress / 100)}`}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+              />
+            </svg>
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontSize: '26px', fontWeight: '500', color: '#4a2030'
+            }}>
+              {formatTime(timerSeconds)}
+            </div>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={resetTimer} style={{
+            width: '44px', height: '44px', borderRadius: '50%',
+            background: '#fdf0f4', border: '0.5px solid #f0dde5',
+            fontSize: '16px', cursor: 'pointer', color: '#b07a8e'
+          }}>↺</button>
+          <button onClick={() => timerRunning ? setTimerRunning(false) : startTimer()} style={{
+            flex: 1, background: timerRunning ? '#f7d6e4' : '#993556',
+            color: timerRunning ? '#993556' : '#fff',
+            border: 'none', borderRadius: '99px', padding: '12px',
+            fontSize: '13px', fontWeight: '500', cursor: 'pointer'
+          }}>
+            {timerRunning ? 'Pause' : timerSeconds > 0 ? 'Resume' : 'Start'}
+          </button>
+        </div>
+      </div>
 
       {/* XP bar */}
       <div style={card}>
