@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const API_KEY = import.meta.env.VITE_CLAUDE_API_KEY
 
@@ -12,6 +12,27 @@ export default function WorkoutScreen({ setScreen }) {
   const [rating, setRating] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [restTimer, setRestTimer] = useState(null)
+  const [restSeconds, setRestSeconds] = useState(0)
+  const [showPR, setShowPR] = useState(false)
+  const [increment, setIncrement] = useState(2.5)
+
+  useEffect(() => {
+    let interval
+    if (restTimer) {
+      interval = setInterval(() => {
+        setRestSeconds(s => {
+          if (s <= 1) {
+            clearInterval(interval)
+            setRestTimer(false)
+            return 0
+          }
+          return s - 1
+        })
+      }, 1000)
+    }
+    return () => clearInterval(interval)
+  }, [restTimer])
 
   if (!session) return (
     <div style={{ padding: '24px 16px', textAlign: 'center', color: '#b07a8e', marginTop: '40px' }}>
@@ -23,10 +44,16 @@ export default function WorkoutScreen({ setScreen }) {
   const totalSets = exercise?.sets || 3
   const workoutLogs = JSON.parse(localStorage.getItem('workoutLogs') || '{}')
   const lastLog = workoutLogs[exercise?.name]
+  const isPR = lastLog && weight > lastLog.weight
 
   const logSet = () => {
     const newSets = [...sets, { weight, reps }]
     setSets(newSets)
+
+    if (isPR) {
+      setShowPR(true)
+      setTimeout(() => setShowPR(false), 2500)
+    }
 
     const logs = JSON.parse(localStorage.getItem('workoutLogs') || '{}')
     logs[exercise.name] = { weight, reps, date: new Date().toISOString() }
@@ -43,6 +70,8 @@ export default function WorkoutScreen({ setScreen }) {
         setSets([])
         setWeight(nextEx.target || 20)
         setReps(10)
+        setRestTimer(true)
+        setRestSeconds(90)
       } else {
         const today = new Date().toLocaleDateString('en-GB', { weekday: 'long' })
         logs[today + '_done'] = true
@@ -66,6 +95,9 @@ export default function WorkoutScreen({ setScreen }) {
 
         setDone(true)
       }
+    } else {
+      setRestTimer(true)
+      setRestSeconds(90)
     }
   }
 
@@ -97,16 +129,16 @@ Her check-in data today:
 Workout: ${session.name}
 Exercises: ${session.exercises.map(e => e.name).join(', ')}
 
-Give a direct, honest analysis of why the workout was ${selectedRating.toLowerCase()}. No fluff, no "you've got this". Just facts.
+Give a direct, honest analysis of why the workout was ${selectedRating.toLowerCase()}. No fluff. Just facts.
 
 Respond ONLY with valid JSON:
 {
   "headline": "<short verdict, max 5 words>",
-  "body": "<2-3 sentences, direct and honest, explaining what hurt performance based on the check-in data>",
+  "body": "<2-3 sentences, direct and honest>",
   "factors": [
-    { "label": "<factor name>", "detail": "<one sentence why this hurt performance>", "impact": "<High|Medium|Low>" }
+    { "label": "<factor>", "detail": "<one sentence>", "impact": "<High|Medium|Low>" }
   ],
-  "nextStep": "<one concrete action for next session>"
+  "nextStep": "<one concrete action>"
 }`
 
     try {
@@ -158,6 +190,8 @@ Respond ONLY with valid JSON:
     border: '0.5px solid #f0dde5',
   }
 
+  const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
   if (done && !rating) return (
     <div style={{ padding: '24px 16px' }}>
       <div style={{ textAlign: 'center', marginBottom: '20px', marginTop: '10px' }}>
@@ -196,7 +230,8 @@ Respond ONLY with valid JSON:
           return (
             <div key={i} style={{
               display: 'flex', justifyContent: 'space-between',
-              padding: '5px 0', borderBottom: i < session.exercises.length - 1 ? '0.5px solid #fbe8f0' : 'none',
+              padding: '5px 0',
+              borderBottom: i < session.exercises.length - 1 ? '0.5px solid #fbe8f0' : 'none',
               fontSize: '11px'
             }}>
               <div style={{ color: '#4a2030' }}>{ex.name}</div>
@@ -238,10 +273,7 @@ Respond ONLY with valid JSON:
         background: analysis.type === 'great' ? '#e1f5ee' : '#fcebeb',
         borderRadius: '0 16px 16px 0'
       }}>
-        <div style={{
-          fontSize: '10px', fontWeight: '500', marginBottom: '6px',
-          color: analysis.type === 'great' ? '#0f6e56' : '#a32d2d'
-        }}>
+        <div style={{ fontSize: '10px', fontWeight: '500', marginBottom: '6px', color: analysis.type === 'great' ? '#0f6e56' : '#a32d2d' }}>
           {analysis.type === 'great' ? 'Why this worked' : 'What likely hurt your performance'}
         </div>
         <div style={{ fontSize: '11px', color: '#4a2030', lineHeight: '1.6' }}>{analysis.body}</div>
@@ -253,10 +285,12 @@ Respond ONLY with valid JSON:
           {analysis.factors.map((f, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'flex-start', gap: '10px',
-              padding: '8px 0', borderBottom: i < analysis.factors.length - 1 ? '0.5px solid #fbe8f0' : 'none'
+              padding: '8px 0',
+              borderBottom: i < analysis.factors.length - 1 ? '0.5px solid #fbe8f0' : 'none'
             }}>
               <div style={{
-                width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, marginTop: '3px',
+                width: '8px', height: '8px', borderRadius: '50%',
+                flexShrink: 0, marginTop: '3px',
                 background: impactColor[f.impact]?.dot || '#d4537e'
               }} />
               <div style={{ flex: 1 }}>
@@ -301,11 +335,63 @@ Respond ONLY with valid JSON:
         fontSize: '12px', cursor: 'pointer', marginBottom: '16px', padding: 0, fontWeight: '500'
       }}>← Back to plan</button>
 
-      <div style={{ fontSize: '18px', fontWeight: '500', color: '#4a2030', marginBottom: '2px' }}>{exercise.name}</div>
-      <div style={{ fontSize: '11px', color: '#b07a8e', marginBottom: '20px' }}>
-        Set {sets.length + 1} of {totalSets} · {session.name}
+      {/* Exercise progress indicator */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
+        {session.exercises.map((_, i) => (
+          <div key={i} style={{
+            flex: 1, height: '3px', borderRadius: '99px',
+            background: i < currentEx ? '#993556' : i === currentEx ? '#d4537e' : '#fbe8f0'
+          }} />
+        ))}
       </div>
 
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2px' }}>
+        <div style={{ fontSize: '18px', fontWeight: '500', color: '#4a2030' }}>{exercise.name}</div>
+        <div style={{ fontSize: '10px', color: '#b07a8e', marginTop: '4px' }}>
+          {currentEx + 1} of {session.exercises.length}
+        </div>
+      </div>
+      <div style={{ fontSize: '11px', color: '#b07a8e', marginBottom: '16px' }}>
+        Set {sets.length + 1} of {totalSets}
+      </div>
+
+      {/* PR banner */}
+      {showPR && (
+        <div style={{
+          background: '#e1f5ee', borderRadius: '12px', padding: '10px 14px',
+          marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px',
+          border: '0.5px solid #5dcaa5'
+        }}>
+          <div style={{ fontSize: '18px' }}>🏆</div>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '500', color: '#0f6e56' }}>New personal record!</div>
+            <div style={{ fontSize: '10px', color: '#1d9e75' }}>
+              {weight} kg — up from {lastLog?.weight} kg last time
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rest timer */}
+      {restTimer && (
+        <div style={{
+          background: '#fdf0f4', borderRadius: '12px', padding: '12px 14px',
+          marginBottom: '12px', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', border: '0.5px solid #f0dde5'
+        }}>
+          <div>
+            <div style={{ fontSize: '10px', color: '#b07a8e', marginBottom: '2px' }}>Rest timer</div>
+            <div style={{ fontSize: '22px', fontWeight: '500', color: '#993556' }}>{formatTime(restSeconds)}</div>
+          </div>
+          <button onClick={() => setRestTimer(false)} style={{
+            background: '#f7d6e4', border: 'none', borderRadius: '99px',
+            padding: '6px 14px', fontSize: '11px', color: '#993556',
+            fontWeight: '500', cursor: 'pointer'
+          }}>Skip</button>
+        </div>
+      )}
+
+      {/* Last session */}
       {lastLog && (
         <div style={{ ...card, background: '#fdf0f4', textAlign: 'center' }}>
           <div style={{ fontSize: '10px', color: '#b07a8e', marginBottom: '4px' }}>Last session</div>
@@ -314,24 +400,41 @@ Respond ONLY with valid JSON:
         </div>
       )}
 
+      {/* Weight */}
       <div style={card}>
-        <div style={{ fontSize: '9px', fontWeight: '500', color: '#b07a8e', letterSpacing: '.5px', marginBottom: '12px' }}>WEIGHT (KG)</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <div style={{ fontSize: '9px', fontWeight: '500', color: '#b07a8e', letterSpacing: '.5px' }}>WEIGHT (KG)</div>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            {[1.25, 2.5, 5].map(inc => (
+              <button key={inc} onClick={() => setIncrement(inc)} style={{
+                padding: '3px 8px', borderRadius: '99px', border: 'none',
+                background: increment === inc ? '#993556' : '#f7d6e4',
+                color: increment === inc ? '#fff' : '#993556',
+                fontSize: '9px', fontWeight: '500', cursor: 'pointer'
+              }}>±{inc}</button>
+            ))}
+          </div>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={() => setWeight(Math.max(0, parseFloat((weight - 2.5).toFixed(1))))} style={{
+          <button onClick={() => setWeight(Math.max(0, parseFloat((weight - increment).toFixed(2))))} style={{
             width: '44px', height: '44px', borderRadius: '50%', background: '#f7d6e4',
             border: 'none', fontSize: '20px', color: '#993556', cursor: 'pointer', fontWeight: '500'
           }}>−</button>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '36px', fontWeight: '500', color: '#4a2030' }}>{weight}</div>
-            <div style={{ fontSize: '11px', color: '#b07a8e' }}>kg</div>
+            <div style={{
+              fontSize: '36px', fontWeight: '500',
+              color: isPR ? '#0f6e56' : '#4a2030'
+            }}>{weight}</div>
+            <div style={{ fontSize: '11px', color: '#b07a8e' }}>kg {isPR && '↑ PR'}</div>
           </div>
-          <button onClick={() => setWeight(parseFloat((weight + 2.5).toFixed(1)))} style={{
+          <button onClick={() => setWeight(parseFloat((weight + increment).toFixed(2)))} style={{
             width: '44px', height: '44px', borderRadius: '50%', background: '#f7d6e4',
             border: 'none', fontSize: '20px', color: '#993556', cursor: 'pointer', fontWeight: '500'
           }}>+</button>
         </div>
       </div>
 
+      {/* Reps */}
       <div style={card}>
         <div style={{ fontSize: '9px', fontWeight: '500', color: '#b07a8e', letterSpacing: '.5px', marginBottom: '12px' }}>REPS</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -350,6 +453,7 @@ Respond ONLY with valid JSON:
         </div>
       </div>
 
+      {/* Sets logged */}
       {sets.length > 0 && (
         <div style={card}>
           <div style={{ fontSize: '10px', color: '#b07a8e', marginBottom: '8px' }}>Sets logged</div>
@@ -359,7 +463,8 @@ Respond ONLY with valid JSON:
                 width: '44px', height: '44px', borderRadius: '10px',
                 background: i < sets.length ? '#d4537e' : '#fdf0f4',
                 border: '0.5px solid #f0dde5',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
               }}>
                 {i < sets.length && (
                   <>
